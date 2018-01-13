@@ -13,36 +13,33 @@ from Crypto.Cipher import AES
 # 544 bytes = 768 bytes after encryption (too big)
 
 
-BS = 16
-pad = lambda s: s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
-unpad = lambda s: s[0:-ord(s[-1])]
+BS = 16  # AES Block size is 16 bytes
 SECURE_ITR = 400000  # Number of interations. More secure (slower bruting)
 BASIC_ITR = 250000  # Number of interations. Less secure (faster bruting)
 SALT_LEN = 32  # 32 byte (256 bit) random salt length for key generation
-MAX_PT_LEN = 543  # (15(3*16)+2(3*16)) = 752
+MAX_PT_LEN = 543  # Largest plaintext which will fit on a 1k card
+
+pad = lambda s: s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
+unpad = lambda s: s[0:-ord(s[-1])]
+
 
 class Cipher:
 
     padded = ""
 
-    def __init__(self, password, ic=4e5, salt=None):
+    def __init__(self, password, ic=SECURE_ITR, salt=None):
         if salt is None:
             self.salt = os.urandom(SALT_LEN)
         else:
             self.salt = salt
-        self.key, self.salt = self.gen_key(password, self.salt, ic)
+        self.key, self.salt = self.gen_key(password, ic)
 
-    def gen_key(self, pw, iteration_count=4e5, salt=None):
-        if salt is None:
-            salt = self.salt
-        if iteration_count is None:
-            iteration_count = 4e5
-            print iteration_count
-        os.GRND_RANDOM = True  # Switch to using /dev/random
+    def gen_key(self, pw, iteration_count=SECURE_ITR):
+
         k = hashlib.pbkdf2_hmac('sha256',
                                 b'%s' % pw,
-                                b'%s' % salt,
-                                400000)
+                                b'%s' % self.salt,
+                                iteration_count)
         return (k, self.salt)
 
     def encrypt(self, plaintext):
