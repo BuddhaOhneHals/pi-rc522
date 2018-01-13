@@ -1,6 +1,6 @@
 import pickle
 import rfcrypto
-
+from base64 import b64encode
 # Adds support for AES encryption when dealing with MiFare Classic 1k cards
 # Also adds an EncryptionException class which can be used by the consumer
 # to gracefully handle exceptions.
@@ -17,6 +17,7 @@ class RFIDUtil(object):
     last_auth = None
 
     debug = False
+    verbose = False  # A second level to verbosity to print full details
 
     def __init__(self, rfid):
         self.rfid = rfid
@@ -120,13 +121,13 @@ class RFIDUtil(object):
             if not error:
                 for i in range(len(new_bytes)):
                     if new_bytes[i] != None:
-                        if self.debug:
+                        if self.debug and self.verbose:
                             print("Changing pos " + str(i) + " with current value " + str(data[i]) + " to " + str(new_bytes[i]))
 
                         data[i] = new_bytes[i]
 
                 error = self.rfid.write(block_address, data)
-                if self.debug:
+                if self.debug and self.verbose:
                     print("Writing " + str(data) + " to " + self.sector_string(block_address))
 
         return error
@@ -141,7 +142,7 @@ class RFIDUtil(object):
         error = self.do_auth(block_address)
         if not error:
             (error, data) = self.rfid.read(block_address)
-            if self.debug:
+            if self.debug and self.verbose:
                 print(self.sector_string(block_address) + ": " + str(data))
             return (None, data)
         else:
@@ -171,7 +172,7 @@ class RFIDUtil(object):
                 buff.append(block)
             else:
                 raise RFIDException(error)
-        if self.debug:
+        if self.debug and self.verbose:
             print buff
         return buff
 
@@ -190,42 +191,45 @@ class RFIDUtil(object):
                     raise EncryptionException("Data could not be converted")
             if aes_key is None:
                 raise EncryptionException("Missing aes_key parameter")
+
             cipher = rfcrypto.Cipher(aes_key)
+
             # Verify the data length is less than the max
             if len(data) > rfcrypto.MAX_PT_LEN:
-                    raise EncryptionException("Oversized Data Object")
-            elif len(data) < rfcrypto.MAX_PT_LEN:
-                # Pad the data up to exactly the card length with random bytes
-                mutex_len = rfcrypto.MAX_PT_LEN - len(data)
-                if self.debug:
-                    print "%d - %d = %d" % (rfcrypto.MAX_PT_LEN, len(data), mutex_len )
-                mutex = cipher.random(mutex_len)
+                raise EncryptionException("Oversized Data Object")
 
-                data = data + mutex
-                if self.debug:
-                    print "Mutex: %d + %d = %d" % ((len(data) - len(mutex)), len(mutex), len(data))
             # The resulting string is then encrypted.
-            dat_blk = cipher.encrypt(data)
-            (hash_key, dat_hash) = cipher.hmac(dat_blk)
-            dat_bytes = self.chunk_data(dat_blk.encode("hex"), 2)
-            dat_bytes = [int(i, 16) for i in dat_bytes]
+            dat_blk = cipher.encrypt(data)  # b64encoded rep of the cipher
             if self.debug:
-                print "%d bytes to write" % len(dat_bytes)
-                print dat_bytes
+                print "Plain Text: %s" % data
+                print "Cipher initialized with password: %s" % aes_key
+                print "PBKDF2 key: %s" % b64encode(cipher.key)
+                print "Salt: %s" % b64encode(cipher.salt)
+                print "Length of cipher: %d" % (len(dat_blk))
+                print "Cipher: %s" % dat_blk
+                print "Verifying decryption"
+                dec = cipher.decrypt(dat_blk)
+                if dec == data:
+                    print "Decryption verified"
+                else:
+                    print data
+                    print "------" * 5
+                    print dec
+                    raise EncryptionException("Decryption Verification Failed")
+            (h_key, dat_hash) = cipher.hmac(dat_blk)  # Hash the cipher + rand key
+            dat_bytes = [ord(c) for c in dat_blk]
+            if self.debug:
                 print "Data Hash"
-                print dat_hash
+                print b64encode(dat_hash)
             data_buff = self.chunk_data(dat_bytes, 16)
-            # The data buff should be 47x8
-            if self.debug:
-                print "\nData Buffer:"
-                print data_buff
-                print "\n"
+
         else:
             data_buff = data
 
-        if self.debug:
-            print "Data buffer:"
+        if self.debug and self.verbose:
+            print "\nData Buffer:"
             print data_buff
+            print "\n"
         block_addr = 1
         for i in range(0, len(data_buff)):
             block = data_buff[i]
@@ -233,14 +237,15 @@ class RFIDUtil(object):
                 # These are the sector trailers, we don't want to overwrite
                 block_addr += 1
             self.rewrite(block_addr, block)
-            if self.debug:
+            if self.debug and self.verbose:
                 print "Wrote Block to block address %d" % block_addr
             block_addr += 1
         if encrypt:
             # To decrypt the tags, the client will need the salt and the
             #length of the cipher
+            print b64encode(cipher.salt)
             return (len(dat_blk), cipher.salt)
-    # WIP
+
     def dump_decrypted(self, cipher_len, tag_pass, tag_salt):
         buff = self.dump()
         enc_bytes = []
@@ -249,13 +254,29 @@ class RFIDUtil(object):
             if (i % 4 != 3):
                 # Moves the bytes into a single list
                 for b in block:
-                    enc_bytes.append(b)
-
-        enc_str = "".join(buff)
-        cipher = rfcrypto.Cipher(tag_pass, tag_salt)
+                    enc_bytes.append(chr(b))
+        enc_str = "".join(enc_bytes[0:cipher_len])
+        cipher = rfcrypto.Cipher(tag_pass, rfcrypto.SECURE_ITR, tag_salt)
+        if self.debug:
+            print "Recovered b64 encoded cipher text\n%s" % enc_str
+            print "Initialized with password: %s" % tag_pass
+            print "Initialized with salt: %s" % b64encode(tag_salt)
+            print "PBKDF2 key: %s" % b64encode(cipher.key)
+            print "Cipher Salt: %s" % b64encode(cipher.salt)
+            print "Length of cipher: %d" % (len(enc_str))
+            print "Verifying decryption"
+            dec = cipher.decrypt(enc_str)
+            if dec == "testing":
+                print "It WORKED"
+            else:
+                print "FAILURE"
         # Decrpyt the data using the provided key
         data = cipher.decrypt(enc_str)
-
+        if self.debug:
+            print "Data read:"
+            print data
+            print "\n"
+        return data
 
     def chunk_data(self, lst, chnk_sz):
         out = []
