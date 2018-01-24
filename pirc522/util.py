@@ -181,7 +181,7 @@ class RFIDUtil(object):
     # If the data is a string it will not be changed.
     # After this, data length will be verified to fit
     # Encrypted Free Space.EncryptionException()
-    def load(self, data, encrypt = True, aes_key = None):
+    def load(self, data, encrypt=True, aes_key=None, aes_salt=None):
         if encrypt:
             # try converting non-string data to string via serialization
             if not isinstance(data, type("string")):
@@ -192,7 +192,7 @@ class RFIDUtil(object):
             if aes_key is None:
                 raise EncryptionException("Missing aes_key parameter")
 
-            cipher = rfcrypto.Cipher(aes_key)
+            cipher = rfcrypto.Cipher(aes_key, aes_salt)
 
             # Verify the data length is less than the max
             if len(data) > rfcrypto.MAX_PT_LEN:
@@ -257,19 +257,6 @@ class RFIDUtil(object):
                     enc_bytes.append(chr(b))
         enc_str = "".join(enc_bytes[0:cipher_len])
         cipher = rfcrypto.Cipher(tag_pass, rfcrypto.SECURE_ITR, tag_salt)
-        if self.debug:
-            print "Recovered b64 encoded cipher text\n%s" % enc_str
-            print "Initialized with password: %s" % tag_pass
-            print "Initialized with salt: %s" % b64encode(tag_salt)
-            print "PBKDF2 key: %s" % b64encode(cipher.key)
-            print "Cipher Salt: %s" % b64encode(cipher.salt)
-            print "Length of cipher: %d" % (len(enc_str))
-            print "Verifying decryption"
-            dec = cipher.decrypt(enc_str)
-            if dec == "testing":
-                print "It WORKED"
-            else:
-                print "FAILURE"
         # Decrpyt the data using the provided key
         data = cipher.decrypt(enc_str)
         if self.debug:
@@ -283,3 +270,7 @@ class RFIDUtil(object):
         for i in range(0, len(lst), chnk_sz):
             out.append(lst[i:i + chnk_sz])
         return out
+
+    def hash_data(data, hash_key):
+        cipher = rfcrypto.Cipher("none")
+        return cipher.hmac(data, hash_key)
