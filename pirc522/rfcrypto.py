@@ -17,7 +17,7 @@ BS = 16  # AES Block size is 16 bytes
 SECURE_ITR = 400000  # Number of interations. More secure (slower bruting)
 BASIC_ITR = 250000  # Number of interations. Less secure (faster bruting)
 SALT_LEN = 32  # 32 byte (256 bit) random salt length for key generation
-MAX_PT_LEN = 543  # Largest plaintext which will fit on a 1k card
+MAX_PT_LEN = 495  # Largest plaintext which will fit on a 1k card with a 32 byte hash
 
 pad = lambda s: s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
 unpad = lambda s: s[0:-ord(s[-1])]
