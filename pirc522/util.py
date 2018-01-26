@@ -248,6 +248,7 @@ class RFIDUtil(object):
             if self.debug and self.verbose:
                 if not err:
                     print "Wrote Block to block address %d" % block_addr
+
             block_addr += 1
         if encrypt:
             # To decrypt the tags, the client will need the salt and the
