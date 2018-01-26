@@ -112,7 +112,12 @@ class RFIDUtil(object):
         Rewrites block with new bytes, keeping the old ones if None is passed. Tag and auth must be set - does auth.
         Returns error state.
         """
+        if not self.rfid.card_auth(self.method, block_address, self.key, self.uid):
+            print "Auth should work now"
+        else:
+            print "Still you fail. Why u no good?"
         if not self.is_tag_set_auth():
+            print "Tag Auth not Set!"
             return True
 
         error = self.do_auth(block_address)
@@ -129,7 +134,10 @@ class RFIDUtil(object):
                 error = self.rfid.write(block_address, data)
                 if self.debug and self.verbose:
                     print("Writing " + str(data) + " to " + self.sector_string(block_address))
-
+            else:
+                print "Error with rfid.read()"
+        else:
+            print "Error with do_auth()"
         return error
 
     def read_out(self, block_address):
@@ -192,7 +200,7 @@ class RFIDUtil(object):
             if aes_key is None:
                 raise EncryptionException("Missing aes_key parameter")
 
-            cipher = rfcrypto.Cipher(aes_key, aes_salt)
+            cipher = rfcrypto.Cipher(aes_key, rfcrypto.SECURE_ITR, aes_salt)
 
             # Verify the data length is less than the max
             if len(data) > rfcrypto.MAX_PT_LEN:
@@ -236,9 +244,10 @@ class RFIDUtil(object):
             if (block_addr % 4 == 3):
                 # These are the sector trailers, we don't want to overwrite
                 block_addr += 1
-            self.rewrite(block_addr, block)
+            err = self.rewrite(block_addr, block)
             if self.debug and self.verbose:
-                print "Wrote Block to block address %d" % block_addr
+                if not err:
+                    print "Wrote Block to block address %d" % block_addr
             block_addr += 1
         if encrypt:
             # To decrypt the tags, the client will need the salt and the
