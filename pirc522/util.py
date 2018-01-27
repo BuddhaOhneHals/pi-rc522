@@ -108,6 +108,8 @@ class RFIDUtil(object):
         return self.rewrite(addr, key_a[:6] + auth_bits[:3] + (user_data, ) + key_b[:6])
 
     def rewrite(self, block_address, new_bytes):
+        print "Got new bytes"
+        print new_bytes
         """
         Rewrites block with new bytes, keeping the old ones if None is passed. Tag and auth must be set - does auth.
         Returns error state.
@@ -232,7 +234,7 @@ class RFIDUtil(object):
             data_buff = self.chunk_data(dat_bytes, 16)
 
         else:
-            data_buff = data
+            data_buff = self.chunk_data(data, 16)
 
         if self.debug and self.verbose:
             print "\nData Buffer:"
@@ -248,7 +250,6 @@ class RFIDUtil(object):
             if self.debug and self.verbose:
                 if not err:
                     print "Wrote Block to block address %d" % block_addr
-
             block_addr += 1
         if encrypt:
             # To decrypt the tags, the client will need the salt and the
